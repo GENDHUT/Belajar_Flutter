@@ -1,96 +1,149 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'board.dart';
+import 'piece.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Fullscreen immersive & landscape
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
   runApp(const MyApp());
 }
 
-// Widget utama aplikasi (stateless karena tidak berubah selama runtime)
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter test 1 Page'),
+      title: 'Flutter Catur',
+      debugShowCheckedModeBanner: false,
+      home: const ChessGameScreen(),
     );
   }
 }
 
-// Stateful widget agar bisa mengubah nilai (seperti counter)
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  final String title;
-
+class ChessGameScreen extends StatefulWidget {
+  const ChessGameScreen({super.key});
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<ChessGameScreen> createState() => _ChessGameScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 2;
+class _ChessGameScreenState extends State<ChessGameScreen> {
+  final List<Piece> whiteCaptured = [];
+  final List<Piece> blackCaptured = [];
+  // untuk rebuild ChessBoard saat restart
+  int gameId = 0;
 
-  // Fungsi untuk menambah nilai counter
-  void _incrementCounter() {
+  // dipanggil Board saat ada capture non-king
+  void handleCapture(Piece captured) {
     setState(() {
-      _counter++;
+      if (captured.isWhite) {
+        whiteCaptured.add(captured);
+      } else {
+        blackCaptured.add(captured);
+      }
     });
   }
 
-  // Fungsi untuk mereset counter ke 0
-  void _resetCounter() {
-    setState(() {
-      _counter = 0;
+  // dipanggil Board saat king tertangkap
+  void handleGameEnd(bool whiteWinner) {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // wajib tekan tombol
+      builder: (ctx) => AlertDialog(
+        title: const Text('Game Over'),
+        content: Text(whiteWinner ? 'White wins!' : 'Black wins!'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop(); // tutup dialog
+              setState(() {
+                // reset skor
+                whiteCaptured.clear();
+                blackCaptured.clear();
+                // rebuild board
+                gameId++;
+              });
+            },
+            child: const Text('Restart'),
+          ),
+        ],
+      ),
+    );
+  }
 
-      // Menampilkan notifikasi kecil saat reset berhasil
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Counter telah di-reset ke 0')),
-      );
-    });
+  Widget _buildCapturedList(List<Piece> list, bool isWhite) {
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: list
+          .map((p) => Text(
+                p.symbol,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: p.displayColor,
+                ),
+              ))
+          .toList(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        // Warna AppBar diambil dari tema
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.title),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('Anda telah menekan tombol sebanyak:'),
-            Text(
-              '$_counter', // Menampilkan nilai counter
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-
-      // Dua tombol: tambah dan reset, diletakkan horizontal (Row)
-      floatingActionButton: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Tombol increment
-          FloatingActionButton(
-            onPressed: _incrementCounter,
-            tooltip: 'Tambah',
-            child: const Icon(Icons.add),
+          // panel kiri: white lost
+          Container(
+            width: 100,
+            color: Colors.grey[900],
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  'White Lost',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                _buildCapturedList(whiteCaptured, true),
+              ],
+            ),
           ),
-          const SizedBox(width: 16), // Jarak antar tombol
-
-          // Tombol reset
-          FloatingActionButton(
-            onPressed: _resetCounter,
-            tooltip: 'Reset',
-            backgroundColor: Colors.red, // Warna merah untuk reset
-            child: const Icon(Icons.refresh),
+          // papan catur
+          Expanded(
+            child: Center(
+              child: ChessBoard(
+                key: ValueKey(gameId),
+                onCapture: handleCapture,
+                onGameEnd: handleGameEnd,
+              ),
+            ),
+          ),
+          // panel kanan: black lost
+          Container(
+            width: 100,
+            color: Colors.grey[200],
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  'Black Lost',
+                  style: TextStyle(
+                      color: Colors.black87, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                _buildCapturedList(blackCaptured, false),
+              ],
+            ),
           ),
         ],
       ),
